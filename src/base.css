@@ -1,0 +1,471 @@
+/* ── Orbit theme tokens (copied verbatim from cobalt-chat-ui/src/index.css) ── */
+:root {
+  --aia-red: #d31145;
+  --aia-red-dark: #9c0c34;
+
+  --tint-rgb: 20, 22, 31;
+  --glass-rgb: 255, 255, 255;
+  --shadow-rgb: 0, 0, 0;
+  --surface-solid: #ffffff;
+  --neutral-strong: #14161f;
+  --glass-sheen: rgba(255, 255, 255, 0.9);
+  --glass-sheen-strong: rgba(255, 255, 255, 0.95);
+  --app-bg: linear-gradient(180deg, #fbfbfc 0%, #eef0f3 100%);
+
+  --ink: rgb(var(--tint-rgb));
+  --ink-soft: rgba(var(--tint-rgb), 0.6);
+  --ink-faint: rgba(var(--tint-rgb), 0.4);
+  --hairline: rgba(var(--tint-rgb), 0.1);
+  color-scheme: light;
+
+  --success: 23, 191, 99;
+  --warning: 185, 130, 44;
+}
+
+:root[data-theme='dark'] {
+  --tint-rgb: 255, 255, 255;
+  --glass-rgb: 30, 32, 40;
+  --surface-solid: #22242c;
+  --neutral-strong: #3a3d47;
+  --glass-sheen: rgba(255, 255, 255, 0.07);
+  --glass-sheen-strong: rgba(255, 255, 255, 0.1);
+  --app-bg: linear-gradient(180deg, #1c1e24 0%, #0c0d10 100%);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --tint-rgb: 255, 255, 255;
+    --glass-rgb: 30, 32, 40;
+    --surface-solid: #22242c;
+    --neutral-strong: #3a3d47;
+    --glass-sheen: rgba(255, 255, 255, 0.07);
+    --glass-sheen-strong: rgba(255, 255, 255, 0.1);
+    --app-bg: linear-gradient(180deg, #1c1e24 0%, #0c0d10 100%);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+/* height:100% (rather than min-height) on html/body pins their box to
+   exactly the viewport height — fine while content fits, but once the
+   orchestration screen grows taller than the viewport (expanded agent
+   cards, the merged panel), the background stops painting past that
+   original edge and the overflow renders on the raw white canvas below it.
+   Setting the background on html as well as body, with min-height, means
+   the page keeps painting for however tall the content actually grows. */
+html {
+  background: var(--app-bg);
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, 'Thonburi', 'Leelawadee UI', 'Noto Sans Thai', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--app-bg);
+  color: var(--ink);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ── Auth screen (login / sign up / reset password) ───────────────────── */
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 48px min(8vw, 96px);
+  /* The artwork's mascot + wordmark live in roughly the left 60% of the
+     source image; anchoring the cover-crop there (instead of dead-center)
+     keeps the branding in frame across very different aspect ratios,
+     including a vertical/portrait monitor where cover-by-height crops a lot
+     of width away. */
+  overflow: hidden;
+  color: #1c1c24;
+}
+
+.auth-screen__overlay {
+  position: absolute;
+  inset: 0;
+  /* A soft bloom behind where the card sits (keeps it legible over cloud
+     detail) plus a faint brand-tinted vignette at the edges — the source
+     image is already bright, so this only clarifies, never darkens. */
+  background:
+    radial-gradient(ellipse 62% 75% at 82% 50%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(120deg, rgba(211, 17, 69, 0.05) 0%, rgba(255, 255, 255, 0) 40%);
+  pointer-events: none;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  min-width: 0;
+  width: min(400px, 100%);
+  box-sizing: border-box;
+}
+
+/* Ambient "breathing" glow behind the card — a slow, subtle pulse that gives
+   the glass a sense of life without ever drawing attention away from the form. */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: -34px;
+  z-index: -1;
+  border-radius: 30px;
+  background: radial-gradient(closest-side, rgba(211, 17, 69, 0.16), rgba(211, 17, 69, 0) 72%);
+  filter: blur(18px);
+  animation: auth-glow-breathe 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes auth-glow-breathe {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+.auth-card__inner {
+  /* True iOS-material glass, light variant: a bright, low-alpha white tint
+     over heavy blur + saturation boost — the sky behind should read clearly
+     through it, just softened, the way Control Center reads in light mode. */
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 22px;
+  padding: 32px 30px;
+  box-shadow: 0 24px 55px rgba(28, 28, 40, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  opacity: 0;
+  /* Only opacity moves at the container level — the children below carry
+     their own staggered translateY cascade, so the two never compound into
+     the double-motion jank a mismatched pair of transforms would cause. */
+  animation: auth-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes auth-card-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Staggered iOS-style reveal for the card's contents — each element cascades
+   in on the same easing curve, offset only by animation-delay (set inline per
+   element), rather than each running its own independent motion. */
+.auth-stagger {
+  opacity: 0;
+  animation: auth-child-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes auth-child-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-card__inner h2 {
+  margin: 0 0 20px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1c1c24;
+}
+
+.auth-card__notice {
+  margin: -8px 0 16px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgba(21, 128, 61, 0.1);
+  border: 1px solid rgba(21, 128, 61, 0.3);
+  color: #15803d;
+  font-size: 0.78rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.auth-field span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(28, 28, 36, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-field input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(28, 28, 36, 0.1);
+  border-radius: 11px;
+  padding: 11px 13px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: #1c1c24;
+  outline: none;
+  box-shadow: 0 0 0 0 rgba(211, 17, 69, 0);
+  transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-field input::placeholder {
+  color: rgba(28, 28, 36, 0.35);
+}
+
+.auth-field input:focus {
+  border-color: rgba(211, 17, 69, 0.55);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 4px rgba(211, 17, 69, 0.14);
+}
+
+.auth-form__error {
+  margin: -4px 0 0;
+  font-size: 0.78rem;
+  color: var(--aia-red-dark);
+  background: rgba(211, 17, 69, 0.08);
+  border: 1px solid rgba(211, 17, 69, 0.25);
+  padding: 8px 11px;
+  border-radius: 9px;
+}
+
+.auth-submit {
+  position: relative;
+  margin-top: 4px;
+  border: none;
+  background: var(--aia-red);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 12px;
+  border-radius: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  box-sizing: border-box;
+  transition: background 0.2s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--aia-red-dark);
+}
+
+.auth-submit:active:not(:disabled) {
+  transform: scale(0.96);
+  transition: transform 0.08s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.auth-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-submit.is-success {
+  background: var(--aia-red-dark);
+  opacity: 1;
+  cursor: default;
+  animation: auth-submit-success-ring 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes auth-submit-success-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(211, 17, 69, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(211, 17, 69, 0);
+  }
+}
+
+.auth-submit__check {
+  animation: auth-submit-check-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes auth-submit-check-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.auth-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.auth-links button {
+  border: none;
+  background: transparent;
+  color: rgba(28, 28, 36, 0.6);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 2px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s ease;
+}
+
+.auth-links button:hover {
+  color: #1c1c24;
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .auth-screen {
+    justify-content: center;
+    padding: 32px 20px;
+  }
+}
+
+.app-header--hidden {
+  display: none;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  background: rgba(var(--tint-rgb), 0.04);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(var(--tint-rgb), 0.08);
+  color: var(--ink);
+}
+
+.auth-screen__theme {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(28, 28, 36, 0.12);
+  color: #1c1c24;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Dark mode: same artwork, dimmed, with a dark frosted card on top. */
+:root[data-theme='dark'] .auth-screen {
+  color: #f2f3f7;
+}
+
+:root[data-theme='dark'] .auth-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 16, 0.55);
+  pointer-events: none;
+}
+
+:root[data-theme='dark'] .auth-screen__overlay {
+  z-index: 1;
+  background: radial-gradient(ellipse 62% 75% at 82% 50%, rgba(10, 11, 16, 0.5), rgba(10, 11, 16, 0) 60%);
+}
+
+:root[data-theme='dark'] .auth-card {
+  z-index: 2;
+}
+
+:root[data-theme='dark'] .auth-card__inner {
+  background: rgba(24, 26, 34, 0.55);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 55px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .auth-card__inner h2,
+:root[data-theme='dark'] .auth-links button:hover {
+  color: #f2f3f7;
+}
+
+:root[data-theme='dark'] .auth-field span,
+:root[data-theme='dark'] .auth-links button {
+  color: rgba(242, 243, 247, 0.65);
+}
+
+:root[data-theme='dark'] .auth-field input {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f2f3f7;
+}
+
+:root[data-theme='dark'] .auth-field input::placeholder {
+  color: rgba(242, 243, 247, 0.35);
+}
+
+:root[data-theme='dark'] .auth-field input:focus {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+:root[data-theme='dark'] .auth-form__error {
+  color: #ff8fa9;
+}
+
+:root[data-theme='dark'] .auth-card__notice {
+  color: #6ee7a0;
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+:root[data-theme='dark'] .auth-screen__theme {
+  background: rgba(24, 26, 34, 0.6);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f2f3f7;
+}
+
