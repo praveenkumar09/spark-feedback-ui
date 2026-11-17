@@ -7,7 +7,7 @@ export const LANGS: { code: Lang; label: string; long: string }[] = [
   { code: 'ta', label: 'தமிழ்', long: 'தமிழ்' },
 ]
 
-type Keys = 'welcome' | 'loginSub' | 'policyNo' | 'dob' | 'signIn' | 'signingIn' | 'signOut' | 'language' | 'question' | 'typeAnswer' | 'send' | 'yes' | 'no' | 'listening' | 'speaking' | 'thinking' | 'tapToSpeak' | 'tapToSend' | 'micOn' | 'micOff' | 'micBlocked' | 'you' | 'understoodYes' | 'understoodNo' | 'understoodUnclear' | 'summaryTitle' | 'summarySub' | 'startAgain' | 'startAgainNote' | 'errorGeneric' | 'sessionExpired' | 'yourPolicy'
+type Keys = 'welcome' | 'loginSub' | 'policyNo' | 'dob' | 'signIn' | 'signingIn' | 'signOut' | 'language' | 'question' | 'typeAnswer' | 'send' | 'yes' | 'no' | 'listening' | 'speaking' | 'thinking' | 'tapToSpeak' | 'tapToSend' | 'micOn' | 'micOff' | 'micBlocked' | 'you' | 'understoodYes' | 'understoodNo' | 'understoodUnclear' | 'summaryTitle' | 'summarySub' | 'startAgain' | 'startAgainNote' | 'errorGeneric' | 'sessionExpired' | 'yourPolicy' | 'change' | 'startChat' | 'startChatSub' | 'transcript'
 
 /** Screen text in the four languages. English is the default. Translations were written by the developers: have a native speaker review them. */
 const S: Record<Lang, Record<Keys, string>> = {
@@ -19,6 +19,10 @@ const S: Record<Lang, Record<Keys, string>> = {
     signIn: 'Sign in',
     signingIn: 'Signing in…',
     signOut: 'Sign out',
+    change: 'Change',
+    startChat: 'Start conversation',
+    startChatSub: 'Spark will ask a few quick questions. Tap to begin.',
+    transcript: 'Conversation',
     language: 'Language',
     question: 'Question',
     typeAnswer: 'Type your answer…',
@@ -53,6 +57,10 @@ const S: Record<Lang, Record<Keys, string>> = {
     signIn: 'Log masuk',
     signingIn: 'Sedang log masuk…',
     signOut: 'Log keluar',
+    change: 'Ubah',
+    startChat: 'Mulakan perbualan',
+    startChatSub: 'Spark akan bertanya beberapa soalan ringkas. Ketik untuk bermula.',
+    transcript: 'Perbualan',
     language: 'Bahasa',
     question: 'Soalan',
     typeAnswer: 'Taip jawapan anda…',
@@ -87,6 +95,10 @@ const S: Record<Lang, Record<Keys, string>> = {
     signIn: '登录',
     signingIn: '登录中…',
     signOut: '退出登录',
+    change: '更改',
+    startChat: '开始对话',
+    startChatSub: 'Spark 会问几个简短的问题。点按即可开始。',
+    transcript: '对话记录',
     language: '语言',
     question: '问题',
     typeAnswer: '请输入您的回答…',
@@ -121,6 +133,10 @@ const S: Record<Lang, Record<Keys, string>> = {
     signIn: 'உள்நுழைக',
     signingIn: 'உள்நுழைகிறது…',
     signOut: 'வெளியேறு',
+    change: 'மாற்று',
+    startChat: 'உரையாடலைத் தொடங்கு',
+    startChatSub: 'Spark சில சிறிய கேள்விகளைக் கேட்கும். தொடங்க தட்டவும்.',
+    transcript: 'உரையாடல்',
     language: 'மொழி',
     question: 'கேள்வி',
     typeAnswer: 'உங்கள் பதிலைத் தட்டச்சு செய்யுங்கள்…',

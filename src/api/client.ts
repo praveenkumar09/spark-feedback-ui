@@ -1,6 +1,7 @@
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8090'
 
-export interface QuestionView { key: string; type: string; text: string; number: number }
+export interface OptionView { key: string; text: string }
+export interface QuestionView { key: string; type: string; text: string; number: number; options: OptionView[] }
 export interface AnswerView { questionKey: string; question: string; answer: string; decision: string; source: string }
 export interface Turn {
   sessionId: string
@@ -44,7 +45,7 @@ export async function getSession(token: string, id: string): Promise<Turn> {
   return json(await fetch(`${BASE}/api/sessions/${id}`, { headers: headers(token) }))
 }
 
-export async function sendAnswer(token: string, id: string, questionKey: string, text: string, source: 'TEXT' | 'BUTTON', choice?: 'YES' | 'NO'): Promise<Turn> {
+export async function sendAnswer(token: string, id: string, questionKey: string, text: string, source: 'TEXT' | 'BUTTON', choice?: string): Promise<Turn> {
   return json(await fetch(`${BASE}/api/sessions/${id}/answer`, {
     method: 'POST', headers: headers(token, { 'Content-Type': 'application/json' }), body: JSON.stringify({ questionKey, text, source, choice }),
   }))
@@ -74,4 +75,43 @@ export async function speak(token: string, id: string, what: string): Promise<Bl
   })
   if (res.status === 204 || !res.ok) return null
   return res.blob()
+}
+
+/** Takes back the latest answer; the server opens that question again. */
+export async function undo(token: string, id: string): Promise<Turn> {
+  return json(await fetch(`${BASE}/api/sessions/${id}/undo`, { method: 'POST', headers: headers(token) }))
+}
+
+// ── Admin panel ──────────────────────────────────────────────────────────────
+
+export interface AdminAnswer { key: string; question: string; answer: string; decision: string; confidence: number | null; source: string; language: string; answeredAt: string }
+export interface AdminResponse {
+  id: string
+  kind: 'saved' | 'live'
+  status: 'COMPLETED' | 'RESTARTED' | 'IN_PROGRESS'
+  sessionId: string
+  policyNo: string
+  holderName: string
+  productName: string
+  channel: string
+  questionnaireKey: string | null
+  language: string
+  startedAt: string
+  finishedAt: string
+  answers: AdminAnswer[]
+}
+
+export async function adminLogin(password: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) })
+  return (await json<{ token: string }>(res)).token
+}
+
+export async function adminResponses(token: string): Promise<AdminResponse[]> {
+  return json(await fetch(`${BASE}/api/admin/responses`, { headers: headers(token) }))
+}
+
+export interface AdminCustomer { policyNo: string; callScript: string }
+
+export async function adminCustomers(token: string): Promise<AdminCustomer[]> {
+  return json(await fetch(`${BASE}/api/admin/customers`, { headers: headers(token) }))
 }

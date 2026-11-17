@@ -7,17 +7,23 @@ const VOICE_LANG: Record<string, string> = { en: 'en-GB', ms: 'ms-MY', zh: 'zh-C
 export function useSpeaker(token: string, sessionId: string) {
   const audio = useRef<HTMLAudioElement | null>(null)
   const finishNow = useRef<(() => void) | null>(null)
+  const gen = useRef(0)   // bumped by every stop()/say(): a line that is no longer the latest never starts playing
 
   const stop = useCallback(() => {
+    gen.current++
     finishNow.current?.()
+    finishNow.current = null
     audio.current?.pause()
+    audio.current = null
     window.speechSynthesis?.cancel()
   }, [])
 
   const say = useCallback(async (what: string, fallbackText: string, lang: string) => {
     stop()
+    const my = gen.current
     let blob: Blob | null = null
     try { blob = await api.speak(token, sessionId, what) } catch { blob = null }
+    if (my !== gen.current) return          // something newer was said or stopped while this was being fetched
     await new Promise<void>((resolve) => {
       finishNow.current = resolve
       if (blob) {
@@ -36,7 +42,7 @@ export function useSpeaker(token: string, sessionId: string) {
         window.speechSynthesis.speak(u)
       } else resolve()
     })
-    finishNow.current = null
+    if (my === gen.current) finishNow.current = null
   }, [token, sessionId, stop])
 
   useEffect(() => stop, [stop])

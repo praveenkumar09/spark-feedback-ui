@@ -4,7 +4,8 @@ import type { Turn } from './api/client'
 import { LoginScreen } from './screens/LoginScreen'
 import { ChatScreen } from './screens/ChatScreen'
 import { SummaryScreen } from './screens/SummaryScreen'
-import { useTheme } from './hooks/useTheme'
+import { AdminScreen } from './screens/AdminScreen'
+import { useTheme, type Theme } from './hooks/useTheme'
 import { strings, type Lang } from './i18n/strings'
 
 const KEY = 'sf-session'
@@ -20,6 +21,11 @@ function readLang(): Lang {
 
 export default function App() {
   const { theme, toggleTheme } = useTheme()
+  if (window.location.pathname.startsWith('/admin')) return <AdminScreen theme={theme} onToggleTheme={toggleTheme} />
+  return <CustomerApp theme={theme} toggleTheme={toggleTheme} />
+}
+
+function CustomerApp({ theme, toggleTheme }: { theme: Theme; toggleTheme: () => void }) {
   const [lang, setLangState] = useState<Lang>(readLang)
   const [auth, setAuth] = useState<{ token: string; turn: Turn } | null>(null)
   const [booting, setBooting] = useState(true)

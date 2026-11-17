@@ -4,13 +4,13 @@ import type { Turn } from '../api/client'
 import { SparkBot, type SparkMode } from '../components/SparkBot'
 import { SparkWordmark } from '../components/SparkWordmark'
 import { ThemeToggle } from '../components/ThemeToggle'
-import { LangSwitch } from '../components/LangSwitch'
-import { strings, type Lang } from '../i18n/strings'
+import { Segmented } from '../components/Segmented'
+import { LANGS, strings, type Lang } from '../i18n/strings'
 import { useRecorder } from '../hooks/useRecorder'
 import { useSpeaker } from '../hooks/useSpeaker'
 import type { Theme } from '../hooks/useTheme'
 
-interface Msg { id: number; who: 'spark' | 'you'; text: string; qkey?: string; decision?: string | null }
+interface Msg { id: number; who: 'spark' | 'you'; text: string; qkey?: string; decision?: string | null; stored?: boolean }
 type Phase = 'speaking' | 'listening' | 'thinking' | 'idle'
 
 interface Props {
@@ -32,7 +32,8 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   const speaker = useSpeaker(token, sid)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [turn, setTurn] = useState<Turn>(initial)
-  const [phase, setPhase] = useState<Phase>('speaking')
+  const [begun, setBegun] = useState(false)   // Spark only starts once the person taps Start (also lets the browser play sound)
+  const [phase, setPhase] = useState<Phase>('idle')
   const [level, setLevel] = useState(0)
   const [voiceOn, setVoiceOn] = useState(true)
   const [micBlocked, setMicBlocked] = useState(false)
@@ -89,7 +90,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, sid, recorder, fail])
 
-  const ask = useCallback(async (tn: Turn, opts: { lead?: 'greeting' | 'clarify' | 'noSpeech'; skipQuestion?: boolean } = {}) => {
+  const ask = useCallback(async (tn: Turn, opts: { lead?: 'greeting' | 'clarify' | 'noSpeech'; skipQuestion?: boolean; reuseBubble?: boolean } = {}) => {
     const my = ++run.current
     recorder.cancel()
     setError(null)
@@ -102,7 +103,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
       if (my !== run.current) return
     }
     if (!opts.skipQuestion && tn.question) {
-      push({ who: 'spark', text: tn.question.text, qkey: tn.question.key })
+      if (!opts.reuseBubble) push({ who: 'spark', text: tn.question.text, qkey: tn.question.key })
       await speaker.say('question', tn.question.text, L)
       if (my !== run.current) return
     }
@@ -111,6 +112,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
 
   const handleResult = useCallback(async (next: Turn) => {
     setTurn(next)
+    if (next.language && next.language !== langRef.current) { langRef.current = next.language as Lang; onLang(next.language as Lang) }   // the customer picked another language: carry on in it
     if (next.noSpeech) {
       noSpeechCount.current += 1
       if (noSpeechCount.current >= 2) { setPhase('idle'); return }
@@ -118,7 +120,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
       return
     }
     noSpeechCount.current = 0
-    if (next.heard) push({ who: 'you', text: next.heard, decision: next.decision })
+    if (next.heard) push({ who: 'you', text: next.heard, decision: next.decision, stored: !next.repeat })
     if (next.status === 'COMPLETED') {
       const my = ++run.current
       setPhase('speaking')
@@ -128,20 +130,21 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
       return
     }
     await ask(next, next.repeat ? { lead: 'clarify' } : {})
-  }, [ask, push, speaker, onComplete])
+  }, [ask, push, speaker, onComplete, onLang])
 
   // First turn: greet (unless the customer is coming back part-way through), then ask.
   useEffect(() => {
-    if (started.current) return
+    if (!begun || started.current) return
     started.current = true
+    setPhase('speaking')
     const midway = (initial.question?.number ?? 1) > 1
     void ask(initial, midway ? {} : { lead: 'greeting' })
     return () => { run.current++; recorder.cancel(); speaker.stop() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [begun])
 
   // ── what the person does ──────────────────────────────────────────────────────
-  async function submitText(text: string, source: 'TEXT' | 'BUTTON', choice?: 'YES' | 'NO') {
+  async function submitText(text: string, source: 'TEXT' | 'BUTTON', choice?: string) {
     const q = turn.question
     if (!q || !text.trim()) return
     run.current++                               // stop speaking / listening
@@ -156,6 +159,26 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     } catch (e) { fail(e) }
   }
 
+  /** The customer says their last answer was wrong: take it back and ask the same question again. */
+  async function changeLast() {
+    if (phase === 'thinking') return
+    run.current++                               // stop speaking / listening, and ignore anything still on its way
+    recorder.cancel()
+    speaker.stop()
+    setDraft('')
+    setError(null)
+    setPhase('thinking')
+    try {
+      const next = await api.undo(token, sid)
+      setTurn(next)
+      noSpeechCount.current = 0
+      const key = next.question?.key
+      const at = key ? msgs.findIndex((m) => m.who === 'spark' && m.qkey === key) : -1
+      setMsgs((prev) => (at >= 0 ? prev.slice(0, at + 1) : prev.slice(0, prev.findIndex((m) => m.who === 'you' && m.stored) >= 0 ? prev.findIndex((m) => m.who === 'you' && m.stored) : prev.length)))
+      await ask(next, { reuseBubble: at >= 0 })
+    } catch (e) { fail(e) }
+  }
+
   function onSubmit(e: FormEvent) { e.preventDefault(); void submitText(draft, 'TEXT') }
 
   function orbTap() {
@@ -165,7 +188,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   }
 
   async function changeLanguage(l: Lang) {
-    if (l === lang) return
+    if (l === lang || phase === 'thinking') return
     onLang(l)
     langRef.current = l
     try {
@@ -184,6 +207,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   }
 
   function toggleVoice() {
+    if (phase === 'thinking') return
     const on = !voiceOn
     setVoiceOn(on)
     voiceRef.current = on
@@ -194,58 +218,93 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   const mode: SparkMode = phase === 'speaking' ? 'speaking' : phase === 'listening' ? 'listening' : phase === 'thinking' ? 'thinking' : 'idle'
   const status = phase === 'speaking' ? t.speaking : phase === 'listening' ? t.listening : phase === 'thinking' ? t.thinking : turn.question ? t.tapToSpeak : ''
   const q = turn.question
+  const lastHeard = (() => { const m = [...msgs].reverse().find((x) => x.who === 'you'); return m && m.decision === 'UNCLEAR' ? m : undefined })()
+  const lastStored = [...msgs].reverse().find((m) => m.who === 'you' && m.stored)?.id
   const decisionLabel = (d?: string | null) => (d === 'YES' ? t.understoodYes : d === 'NO' ? t.understoodNo : d === 'UNCLEAR' ? t.understoodUnclear : '')
 
   return (
-    <div className="chat">
-      <header className="chat__bar">
+    <div className="ios ios-chat">
+      <header className="ios-nav ios-nav--wide">
         <SparkWordmark height={20} />
-        <div className="chat__bar-right">
-          <LangSwitch value={lang} onChange={(l) => void changeLanguage(l)} label={t.language} />
-          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-          <button className="chat__link" type="button" onClick={onSignOut}>{t.signOut}</button>
+        <div className="ios-nav__actions">
+          <Segmented className="ios-seg--compact" value={lang} onChange={(l) => void changeLanguage(l)} label={t.language} options={LANGS.map((l) => ({ value: l.code, label: l.label, title: l.long }))} />
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} className="ios-round" />
+          <button className="ios-textbtn" type="button" onClick={onSignOut}>{t.signOut}</button>
         </div>
       </header>
 
-      <main className="chat__main">
-        <section className="chat__stage" aria-live="polite">
-          <button type="button" className="chat__orb" onClick={orbTap} aria-label={status || t.tapToSpeak}>
+      {!begun ? (
+        <main className="ios-start">
+          <img src="/aia-spark-bot.png" alt="" className="ios-hero__bot" width="200" height="212" />
+          <h1 className="ios-title">{t.startChat}</h1>
+          <p className="ios-lede">{t.startChatSub}</p>
+          <button type="button" className="ios-button" onClick={() => setBegun(true)} autoFocus>{t.startChat}</button>
+        </main>
+      ) : (
+      <main className="cb">
+        <section className="cb-call" aria-live="polite">
+          <div className="cb-call__top">
+            <span className={`cb-live cb-live--${mode}`}>{q ? `${t.question} ${q.number}` : t.transcript}</span>
+            <button type="button" className={`ios-voice${voiceOn ? ' is-on' : ''}`} onClick={toggleVoice}>{voiceOn ? t.micOn : t.micOff}</button>
+          </div>
+          <button type="button" className="ios-orb" onClick={orbTap} aria-label={status || t.tapToSpeak}>
             <SparkBot mode={mode} level={level} label="Spark" />
           </button>
-          <p className="chat__status">{status}</p>
-          <button type="button" className={`chat__voice${voiceOn ? ' is-on' : ''}`} onClick={toggleVoice}>{voiceOn ? t.micOn : t.micOff}</button>
-          {q && <p className="chat__count">{t.question} {q.number}</p>}
+          <p className="ios-status">{status}</p>
         </section>
 
-        <section className="chat__thread">
-          <div className="chat__list" ref={listRef}>
-            {msgs.map((m) => (
-              <div key={m.id} className={`bubble bubble--${m.who}`}>
-                <span className="bubble__who">{m.who === 'spark' ? 'Spark' : t.you}</span>
-                <p>{m.text}</p>
-                {m.who === 'you' && m.decision && m.decision !== 'TEXT' && <span className={`chip chip--${m.decision.toLowerCase()}`}>{decisionLabel(m.decision)}</span>}
-              </div>
-            ))}
-            {phase === 'thinking' && <div className="bubble bubble--spark bubble--dots" aria-hidden="true"><i /><i /><i /></div>}
-          </div>
-
-          {micBlocked && <p className="chat__note">{t.micBlocked}</p>}
-          {error && <p className="chat__note chat__note--error" role="alert">{error}</p>}
-
-          <div className="composer">
-            {q && q.type !== 'OPEN_TEXT' && (
-              <div className="composer__quick">
-                <button type="button" onClick={() => void submitText(t.yes, 'BUTTON', 'YES')} disabled={phase === 'thinking'}>{t.yes}</button>
-                <button type="button" onClick={() => void submitText(t.no, 'BUTTON', 'NO')} disabled={phase === 'thinking'}>{t.no}</button>
+        <section className="cb-card" aria-label={t.question}>
+          <p className="cb-q" key={q?.key ?? 'none'}>{q ? q.text : ''}</p>
+          {lastHeard && (
+            <p className="cb-heard">
+              <span>{t.you}</span> {lastHeard.text}
+              {lastHeard.decision && lastHeard.decision !== 'TEXT' && decisionLabel(lastHeard.decision) && <b>{decisionLabel(lastHeard.decision)}</b>}
+            </p>
+          )}
+          {micBlocked && <p className="ios-note">{t.micBlocked}</p>}
+          {error && <p className="ios-note ios-note--error" role="alert">{error}</p>}
+          <div className="ios-composer">
+            {q && q.options?.length > 0 && (
+              <div className="ios-quick ios-quick--choice">
+                {q.options.map((o) => (
+                  <button type="button" key={o.key} onClick={() => void submitText(o.text, 'BUTTON', o.key)} disabled={phase === 'thinking'}>{o.key}) {o.text}</button>
+                ))}
               </div>
             )}
-            <form className="composer__form" onSubmit={onSubmit}>
+            {q && q.type !== 'OPEN_TEXT' && !(q.options?.length > 0) && (
+              <div className="ios-quick">
+                <button type="button" className="is-yes" onClick={() => void submitText(t.yes, 'BUTTON', 'YES')} disabled={phase === 'thinking'}>{t.yes}</button>
+                <button type="button" className="is-no" onClick={() => void submitText(t.no, 'BUTTON', 'NO')} disabled={phase === 'thinking'}>{t.no}</button>
+              </div>
+            )}
+            <form className="ios-compose" onSubmit={onSubmit}>
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t.typeAnswer} disabled={!q || phase === 'thinking'} maxLength={1000} aria-label={t.typeAnswer} />
-              <button type="submit" disabled={!q || !draft.trim() || phase === 'thinking'}>{t.send}</button>
+              <button type="submit" aria-label={t.send} disabled={!q || !draft.trim() || phase === 'thinking'}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20V5M5 11.5 12 4.5l7 7" /></svg>
+              </button>
             </form>
           </div>
         </section>
+
+        <section className="cb-transcript" aria-label={t.transcript}>
+          <h2>{t.transcript}</h2>
+          <div className="ios-msgs" ref={listRef}>
+            {msgs.map((m) => (
+              <div key={m.id} className={`ios-msg ios-msg--${m.who}`}>
+                <p className="ios-bubble">{m.text}</p>
+                {m.who === 'you' && ((m.decision && m.decision !== 'TEXT' && decisionLabel(m.decision)) || (m.id === lastStored && phase !== 'thinking')) && (
+                  <span className="ios-receipt">
+                    {m.decision && m.decision !== 'TEXT' ? decisionLabel(m.decision) : ''}
+                    {m.id === lastStored && phase !== 'thinking' && <button type="button" className="ios-change" onClick={() => void changeLast()}>{t.change}</button>}
+                  </span>
+                )}
+              </div>
+            ))}
+            {phase === 'thinking' && <div className="ios-msg ios-msg--spark" aria-hidden="true"><p className="ios-bubble ios-dots"><i /><i /><i /></p></div>}
+          </div>
+        </section>
       </main>
+      )}
     </div>
   )
 }

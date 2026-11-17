@@ -9,6 +9,7 @@ const SILENCE_END_MS = 1400
 const GIVE_UP_MS = 10000
 const MAX_MS = 30000
 const MIN_SPEECH_MS = 250
+const SETTLE_MS = 350   // let the end of Spark's voice (and its echo in the room) die away before listening
 
 export interface Recorder {
   /** Resolves with the recording, or null if nobody spoke / it was cancelled. Rejects if the microphone cannot be used. */
@@ -33,6 +34,7 @@ export function useRecorder(): Recorder {
   const analyser = useRef<AnalyserNode | null>(null)
   const floor = useRef(0.01)
   const finish = useRef<((keep: boolean) => void) | null>(null)
+  const gen = useRef(0)   // bumped by every record()/cancel(): an older, still-starting recording gives up
 
   const ensure = useCallback(async () => {
     if (!stream.current) {
@@ -48,7 +50,12 @@ export function useRecorder(): Recorder {
   }, [])
 
   const record = useCallback(async (onLevel: (level: number) => void) => {
+    finish.current?.(false)                  // never two recordings at once
+    const my = ++gen.current
     await ensure()
+    if (my !== gen.current) return null
+    await new Promise((r) => window.setTimeout(r, SETTLE_MS))
+    if (my !== gen.current) return null
     const mime = pickMime()
     const rec = new MediaRecorder(stream.current!, mime ? { mimeType: mime } : undefined)
     const chunks: Blob[] = []
@@ -104,8 +111,9 @@ export function useRecorder(): Recorder {
   }, [ensure])
 
   const stop = useCallback(() => finish.current?.(true), [])
-  const cancel = useCallback(() => finish.current?.(false), [])
+  const cancel = useCallback(() => { gen.current++; finish.current?.(false) }, [])
   const release = useCallback(() => {
+    gen.current++
     finish.current?.(false)
     stream.current?.getTracks().forEach((t) => t.stop())
     stream.current = null
