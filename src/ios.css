@@ -400,3 +400,18 @@
 .ios-tag-chip { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--fill); color: var(--label); }
 .ios-tag-chip.is-on { background: var(--red-bg); color: var(--red); }
 @media (max-width: 860px) { .ios-data { padding: 8px 16px 40px; } .ios-seg--tabs { min-width: 0; } .ios-table__policy { width: auto; } }
+
+/* Voice lock and voice setup */
+.cb-call__btns { display: inline-flex; align-items: center; gap: 8px; }
+.cb-lock { border: none; cursor: pointer; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(255, 255, 255, 0.18); color: #fff; }
+.cb-lock::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
+.cb-lock--on::before { background: #7dffa6; }
+.cb-lock--learning::before { background: #ffd27d; animation: cb-pulse 1.2s ease-in-out infinite; }
+.cb-lock:disabled, .cb-lock--learning { cursor: default; }
+.cb-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cb-setup__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--red); }
+.cb-setup__step { margin: 0; font-size: 14px; color: var(--label-2); }
+.cb-q--say { min-height: 0; font-size: clamp(22px, 2.3vw, 28px); font-weight: 600; margin: 6px 0 10px; }
+.cb-hint { margin: 10px 0 0; }
+
+.ios-textbtn.is-warn { font-weight: 700; }
