@@ -49,6 +49,13 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   voiceRef.current = voiceOn
   langRef.current = lang
 
+  const pendingYou = useRef<number | null>(null)   // the customer's bubble that is on screen already, waiting for Spark's reading of it
+  const dropPending = useCallback(() => {
+    const id = pendingYou.current
+    pendingYou.current = null
+    if (id != null) setMsgs((prev) => prev.filter((m) => m.id !== id))
+  }, [])
+
   const push = useCallback((m: Omit<Msg, 'id'>) => setMsgs((prev) => [...prev, { ...m, id: nextId.current++ }]), [])
 
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }) }, [msgs, phase])
@@ -60,14 +67,14 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   }, [onUnauthorized])
 
   // ── Spark asks, then listens ──────────────────────────────────────────────────
-  const listen = useCallback(async (tn: Turn, my: number) => {
+  const listen = useCallback(async (tn: Turn, my: number, preRollMs?: number) => {
     const q = tn.question
     if (!q || my !== run.current) return
     if (!voiceRef.current) { setPhase('idle'); return }
     setPhase('listening')
     let blob: Blob | null
     try {
-      blob = await recorder.record(setLevel)
+      blob = await recorder.record(setLevel, { preRollMs, endSilenceMs: q.type === 'OPEN_TEXT' ? 1600 : undefined })
     } catch {
       setMicBlocked(true)
       setVoiceOn(false)
@@ -83,14 +90,35 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     }
     setPhase('thinking')
     try {
-      const next = await api.sendAudio(token, sid, q.key, blob)
+      // two steps so the customer's words appear as soon as they are transcribed, not after the answer has also been worked out
+      const text = (await api.transcribe(token, sid, blob)).trim()
+      if (my !== run.current) return
+      if (!text) {
+        noSpeechCount.current += 1
+        if (noSpeechCount.current >= 2) { setPhase('idle'); return }
+        await ask(tn, { lead: 'noSpeech', skipQuestion: true })
+        return
+      }
+      const bid = nextId.current++
+      pendingYou.current = bid
+      setMsgs((prev) => [...prev, { id: bid, who: 'you', text, stored: false }])
+      const next = await api.sendAnswer(token, sid, q.key, text, 'VOICE')
       if (my !== run.current) return
       await handleResult(next)
-    } catch (e) { fail(e) }
+    } catch (e) { dropPending(); fail(e) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, sid, recorder, fail])
 
-  const ask = useCallback(async (tn: Turn, opts: { lead?: 'greeting' | 'clarify' | 'noSpeech'; skipQuestion?: boolean; reuseBubble?: boolean } = {}) => {
+  /** Speaks a line. If the customer starts talking over it, Spark stops at once and the customer's words are taken (returns true). */
+  const sayWatched = useCallback(async (what: string, text: string, L: string, my: number) => {
+    if (!voiceRef.current) { await speaker.say(what, text, L); return false }
+    let hit = false
+    const off = recorder.watch(() => { hit = true; speaker.stop() })
+    try { await speaker.say(what, text, L) } finally { off() }
+    return hit && my === run.current
+  }, [speaker, recorder])
+
+  const ask = useCallback(async (tn: Turn, opts: { lead?: 'greeting' | 'clarify' | 'noSpeech' | 'reply'; skipQuestion?: boolean; reuseBubble?: boolean } = {}) => {
     const my = ++run.current
     recorder.cancel()
     setError(null)
@@ -99,28 +127,34 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     if (opts.lead) {
       const text = tn.phrases[opts.lead]
       push({ who: 'spark', text })
-      await speaker.say(opts.lead, text, L)
+      if (await sayWatched(opts.lead, text, L, my)) { await listen(tn, my, 900); return }
       if (my !== run.current) return
     }
     if (!opts.skipQuestion && tn.question) {
       if (!opts.reuseBubble) push({ who: 'spark', text: tn.question.text, qkey: tn.question.key })
-      await speaker.say('question', tn.question.text, L)
+      if (await sayWatched('question', tn.question.text, L, my)) { await listen(tn, my, 900); return }
       if (my !== run.current) return
     }
     await listen(tn, my)
-  }, [recorder, speaker, push, listen])
+  }, [recorder, speaker, push, listen, sayWatched])
 
   const handleResult = useCallback(async (next: Turn) => {
     setTurn(next)
     if (next.language && next.language !== langRef.current) { langRef.current = next.language as Lang; onLang(next.language as Lang) }   // the customer picked another language: carry on in it
     if (next.noSpeech) {
+      dropPending()
       noSpeechCount.current += 1
       if (noSpeechCount.current >= 2) { setPhase('idle'); return }
       await ask(next, { lead: 'noSpeech', skipQuestion: true })
       return
     }
     noSpeechCount.current = 0
-    if (next.heard) push({ who: 'you', text: next.heard, decision: next.decision, stored: !next.repeat })
+    if (next.heard) {
+      const id = pendingYou.current
+      pendingYou.current = null
+      if (id != null) setMsgs((prev) => prev.map((m) => (m.id === id ? { ...m, text: next.heard!, decision: next.decision, stored: !next.repeat } : m)))
+      else push({ who: 'you', text: next.heard, decision: next.decision, stored: !next.repeat })
+    }
     if (next.status === 'COMPLETED') {
       const my = ++run.current
       setPhase('speaking')
@@ -129,8 +163,8 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
       if (my === run.current) onComplete(next)
       return
     }
-    await ask(next, next.repeat ? { lead: 'clarify' } : {})
-  }, [ask, push, speaker, onComplete, onLang])
+    await ask(next, next.repeat ? { lead: next.phrases.reply ? 'reply' : 'clarify' } : {})
+  }, [ask, push, speaker, onComplete, onLang, dropPending])
 
   // First turn: greet (unless the customer is coming back part-way through), then ask.
   useEffect(() => {

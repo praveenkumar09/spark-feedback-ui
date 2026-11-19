@@ -45,10 +45,17 @@ export async function getSession(token: string, id: string): Promise<Turn> {
   return json(await fetch(`${BASE}/api/sessions/${id}`, { headers: headers(token) }))
 }
 
-export async function sendAnswer(token: string, id: string, questionKey: string, text: string, source: 'TEXT' | 'BUTTON', choice?: string): Promise<Turn> {
+export async function sendAnswer(token: string, id: string, questionKey: string, text: string, source: 'TEXT' | 'BUTTON' | 'VOICE', choice?: string): Promise<Turn> {
   return json(await fetch(`${BASE}/api/sessions/${id}/answer`, {
     method: 'POST', headers: headers(token, { 'Content-Type': 'application/json' }), body: JSON.stringify({ questionKey, text, source, choice }),
   }))
+}
+
+/** Speech to text only: lets the screen show what the customer said before the answer has been worked out. */
+export async function transcribe(token: string, id: string, audio: Blob): Promise<string> {
+  const form = new FormData()
+  form.append('audio', audio, 'answer')
+  return (await json<{ text: string }>(await fetch(`${BASE}/api/sessions/${id}/transcribe`, { method: 'POST', headers: headers(token), body: form }))).text
 }
 
 export async function sendAudio(token: string, id: string, questionKey: string, audio: Blob): Promise<Turn> {
