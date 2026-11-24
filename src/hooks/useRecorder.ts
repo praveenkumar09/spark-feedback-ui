@@ -20,20 +20,20 @@ const QUICK_ANSWER_MS = 1500
 const TAIL_KEEP_MS = 300            // how much trailing silence is kept in what is sent
 const GIVE_UP_MS = 10000
 const MAX_MS = 30000
-const MIN_SPEECH_MS = 250
+const MIN_SPEECH_MS = 150          // a single "no" is only about 0.15 s of voice
 const SETTLE_MS = 350        // let the end of Spark's voice (and its echo in the room) die away before listening
 const MIN_GATE = 0.022       // the quietest sound that can ever count as speech
 const GATE_FACTOR = 3.5      // ... and how many times louder than the room it must be
 const AMBIENT_MS = 10000     // what the room sounded like over the last 10 s, including a television that talks all the time
 const AMBIENT_FACTOR = 1.9   // the customer must be this much louder than the loudest the background was lately (its 90th percentile)
 const BIN_MS = 100
-const RUN_MS = 300           // speech counts only after this much unbroken talking (gaps under 200 ms are bridged), so TV blips do not add up
+const RUN_MS = 150           // speech counts only after this much unbroken talking (gaps under 200 ms are bridged), so TV blips do not add up
 const RUN_GAP_MS = 200
-const RING_MS = 1500         // how much recent sound is always kept, for the pre-roll
-const BARGE_GATE = 0.05      // while Spark is talking, the customer must be clearly louder than Spark's echo
-const BARGE_FACTOR = 5
-const BARGE_MS = 380         // ... and keep talking for this long before we stop Spark
-const BARGE_GRACE_MS = 700   // ignore the first moments of Spark's own voice
+const RING_MS = 2200         // how much recent sound is always kept, for the pre-roll
+const BARGE_GATE = 0.02      // while Spark is talking, the customer must be clearly louder than Spark's echo (the echo itself is only about 0.003; the browser also turns the mic down while Spark talks, so a normal voice reads 0.03-0.05)
+const BARGE_FACTOR = 8
+const BARGE_MS = 200         // ... and keep talking for this long before we stop Spark (short enough for a one-word "yes" said over the question)
+const BARGE_GRACE_MS = 600   // ignore the first moments of Spark's own voice
 const TARGET_RATE = 16000
 
 export interface RecordOptions {
@@ -53,6 +53,8 @@ export interface Recorder {
   /** Throws the current recording away. */
   cancel: () => void
   release: () => void
+  /** Tell the recorder when Spark is talking: the room's background level is not learned from Spark's own voice leaking into the microphone. */
+  setSparkSpeaking: (on: boolean) => void
 }
 
 const TAP_MODULE = `
@@ -115,6 +117,8 @@ export function useRecorder(): Recorder {
   const bin = useRef({ sum: 0, n: 0, ms: 0 })
   const ambient = useRef(0)                           // 90th percentile of the bins: how loud the background gets
   const recording = useRef(false)
+  const sparkTalking = useRef(false)
+  const learnAgainAt = useRef(0)                      // after Spark stops, its tail still rings in the room for a moment
 
   const onFrame = useCallback((f: Float32Array) => {
     if (!ctx.current) return
@@ -125,7 +129,7 @@ export function useRecorder(): Recorder {
     // the room's noise level: follows quiet moments down quickly, creeps up slowly (so steady background sound raises the gate, speech does not)
     floor.current += (rms - floor.current) * (rms < floor.current ? 1 - Math.exp(-ms / 300) : 1 - Math.exp(-ms / 16000))
     const now = performance.now()
-    if (!recording.current) {                                  // the background level is learned only while nobody is being recorded
+    if (!recording.current && !sparkTalking.current && now > learnAgainAt.current) {   // the background level is learned only while nobody is talking (Spark's own voice is not "the room")
       const b = bin.current
       for (let i = 0; i < f.length; i++) b.sum += f[i] * f[i]
       b.n += f.length; b.ms += ms
@@ -178,12 +182,6 @@ export function useRecorder(): Recorder {
     if (!preRoll) {
       await new Promise((r) => window.setTimeout(r, SETTLE_MS))
       if (my !== gen.current) return null
-      // Straight after a page load nothing is known about the room yet: listen to it for up to 1.5 s first, so a television is recognised as background
-      const known = () => bins.current.length * BIN_MS
-      for (let waited = 0; known() < 1500 && waited < 1500; waited += 100) {
-        await new Promise((r) => window.setTimeout(r, 100))
-        if (my !== gen.current) return null
-      }
     }
     const rate = ctx.current!.sampleRate
     const frames: Float32Array[] = []
@@ -258,6 +256,11 @@ export function useRecorder(): Recorder {
     return () => { on = false; watcher.current = null }
   }, [ensure])
 
+  const setSparkSpeaking = useCallback((on: boolean) => {
+    if (sparkTalking.current && !on) learnAgainAt.current = performance.now() + 450
+    sparkTalking.current = on
+  }, [])
+
   const stop = useCallback(() => finish.current?.(true), [])
   const cancel = useCallback(() => { gen.current++; finish.current?.(false) }, [])
   const release = useCallback(() => {
@@ -273,5 +276,5 @@ export function useRecorder(): Recorder {
   }, [])
 
   useEffect(() => release, [release])
-  return { record, watch, stop, cancel, release }
+  return { record, watch, stop, cancel, release, setSparkSpeaking }
 }

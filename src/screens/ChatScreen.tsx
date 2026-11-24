@@ -58,6 +58,8 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
 
   const push = useCallback((m: Omit<Msg, 'id'>) => setMsgs((prev) => [...prev, { ...m, id: nextId.current++ }]), [])
 
+  useEffect(() => { recorder.setSparkSpeaking(phase === 'speaking') }, [phase, recorder])
+
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }) }, [msgs, phase])
 
   const fail = useCallback((e: unknown) => {
@@ -127,12 +129,12 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     if (opts.lead) {
       const text = tn.phrases[opts.lead]
       push({ who: 'spark', text })
-      if (await sayWatched(opts.lead, text, L, my)) { await listen(tn, my, 900); return }
+      if (await sayWatched(opts.lead, text, L, my)) { await listen(tn, my, 1600); return }
       if (my !== run.current) return
     }
     if (!opts.skipQuestion && tn.question) {
       if (!opts.reuseBubble) push({ who: 'spark', text: tn.question.text, qkey: tn.question.key })
-      if (await sayWatched('question', tn.question.text, L, my)) { await listen(tn, my, 900); return }
+      if (await sayWatched('question', tn.question.text, L, my)) { await listen(tn, my, 1600); return }
       if (my !== run.current) return
     }
     await listen(tn, my)
