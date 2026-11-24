@@ -27,14 +27,17 @@ const GATE_FACTOR = 3.5      // ... and how many times louder than the room it m
 const AMBIENT_MS = 10000     // what the room sounded like over the last 10 s, including a television that talks all the time
 const AMBIENT_FACTOR = 1.9   // the customer must be this much louder than the loudest the background was lately (its 90th percentile)
 const BIN_MS = 100
-const RUN_MS = 150           // speech counts only after this much unbroken talking (gaps under 200 ms are bridged), so TV blips do not add up
+const RUN_MS = 70            // speech counts only after this much unbroken talking (gaps under 200 ms are bridged). A one-word "no" flickers around the gate, so this must be short; total speech (MIN_SPEECH_MS) still has to reach 150 ms
 const RUN_GAP_MS = 200
 const RING_MS = 2200         // how much recent sound is always kept, for the pre-roll
 const BARGE_GATE = 0.02      // while Spark is talking, the customer must be clearly louder than Spark's echo (the echo itself is only about 0.003; the browser also turns the mic down while Spark talks, so a normal voice reads 0.03-0.05)
 const BARGE_FACTOR = 8
-const BARGE_MS = 200         // ... and keep talking for this long before we stop Spark (short enough for a one-word "yes" said over the question)
+const BARGE_MS = 130         // ... and keep talking for this long before we stop Spark (short enough for a one-word "yes" said over the question)
 const BARGE_GRACE_MS = 600   // ignore the first moments of Spark's own voice
 const TARGET_RATE = 16000
+
+const LAB = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('lab')
+const labLog = (e: Record<string, unknown>) => { if (LAB) ((window as unknown as { __rec?: unknown[] }).__rec ??= []).push({ t: Date.now(), ...e }) }
 
 export interface RecordOptions {
   /** Include this much sound from just before the recording started (used when the customer interrupted Spark). */
@@ -108,7 +111,7 @@ export function useRecorder(): Recorder {
   const ctx = useRef<AudioContext | null>(null)
   const ring = useRef<{ f: Float32Array; ms: number }[]>([])
   const floor = useRef(0.01)
-  const finish = useRef<((keep: boolean) => void) | null>(null)
+  const finish = useRef<((keep: boolean, why?: string) => void) | null>(null)
   const sink = useRef<((f: Float32Array, rms: number, ms: number, now: number) => void) | null>(null)
   const watcher = useRef<((rms: number, ms: number, now: number) => void) | null>(null)
   const gen = useRef(0)   // bumped by every record()/cancel(): an older, still-starting recording gives up
@@ -203,13 +206,16 @@ export function useRecorder(): Recorder {
     let elapsedMs = 0          // sound captured so far, counting the pre-roll
     let voiceEndMs = 0         // ... up to the last moment of speech, so the quiet at the end is not sent
     for (const f of frames) elapsedMs += (f.length / rate) * 1000
+    let maxRms = 0
+    let lastGate = 0
     voiceEndMs = elapsedMs
 
     return new Promise<Blob | null>((resolve) => {
       let done = false
-      const end = (keep: boolean) => {
+      const end = (keep: boolean, why = 'cancelled') => {
         if (done) return
         done = true
+        labLog({ ev: 'record-end', why, keep, heard, speechMs: Math.round(speechMs), runMs: Math.round(runMs), maxRms: +maxRms.toFixed(4), gate: +lastGate.toFixed(4), room: +room.toFixed(4), ms: Math.round(elapsedMs), preRoll })
         recording.current = false
         sink.current = null
         finish.current = null
@@ -221,6 +227,8 @@ export function useRecorder(): Recorder {
         frames.push(f)
         elapsedMs += ms
         const gate = Math.max(MIN_GATE, floor.current * GATE_FACTOR, room * AMBIENT_FACTOR)
+        lastGate = gate
+        if (rms > maxRms) maxRms = rms
         if (now - lastLevel > 50) { lastLevel = now; onLevel(Math.min(1, rms * 9)) }
         if (rms > gate) {
           if (now - runEnd > RUN_GAP_MS) runMs = 0   // a new stretch: earlier blips do not count towards it
@@ -232,9 +240,9 @@ export function useRecorder(): Recorder {
           if (speechMs >= MIN_SPEECH_MS && runMs >= RUN_MS) heard = true
         }
         const endSilence = opts.endSilenceMs ?? (speechMs < QUICK_ANSWER_MS ? SILENCE_END_QUICK_MS : SILENCE_END_MS)
-        if (heard && now - lastVoice > endSilence) end(true)
-        else if (!heard && now - startedAt > GIVE_UP_MS) end(false)
-        else if (now - startedAt > MAX_MS) end(true)
+        if (heard && now - lastVoice > endSilence) end(true, 'silence')
+        else if (!heard && now - startedAt > GIVE_UP_MS) end(false, 'gave-up')
+        else if (now - startedAt > MAX_MS) end(true, 'max')
       }
     })
   }, [ensure])
@@ -250,7 +258,7 @@ export function useRecorder(): Recorder {
         if (now - begun < BARGE_GRACE_MS) return
         const gate = Math.max(BARGE_GATE, floor.current * BARGE_FACTOR, ambient.current * 2.2)
         if (rms > gate) { talkMs += ms; lastLoud = now } else if (now - lastLoud > 160) talkMs = 0
-        if (talkMs >= BARGE_MS) { on = false; watcher.current = null; onSpeech() }
+        if (talkMs >= BARGE_MS) { labLog({ ev: 'barge', rms: +rms.toFixed(4), gate: +gate.toFixed(4) }); on = false; watcher.current = null; onSpeech() }
       }
     }).catch(() => { /* no microphone: nothing to watch */ })
     return () => { on = false; watcher.current = null }

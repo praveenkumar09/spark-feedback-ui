@@ -94,6 +94,7 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     try {
       // two steps so the customer's words appear as soon as they are transcribed, not after the answer has also been worked out
       const text = (await api.transcribe(token, sid, blob)).trim()
+      if (new URLSearchParams(window.location.search).has('lab')) ((window as unknown as { __rec?: unknown[] }).__rec ??= []).push({ t: Date.now(), ev: 'transcript', text, bytes: blob.size })
       if (my !== run.current) return
       if (!text) {
         noSpeechCount.current += 1
@@ -129,7 +130,9 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     if (opts.lead) {
       const text = tn.phrases[opts.lead]
       push({ who: 'spark', text })
-      if (await sayWatched(opts.lead, text, L, my)) { await listen(tn, my, 1600); return }
+      const cut = await sayWatched(opts.lead, text, L, my)
+      // Cutting in on the greeting just moves on to the first question; for any other line the customer's words are taken as the answer
+      if (cut && opts.lead !== 'greeting') { await listen(tn, my, 1600); return }
       if (my !== run.current) return
     }
     if (!opts.skipQuestion && tn.question) {
