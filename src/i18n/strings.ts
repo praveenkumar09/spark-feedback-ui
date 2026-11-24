@@ -7,7 +7,7 @@ export const LANGS: { code: Lang; label: string; long: string }[] = [
   { code: 'ta', label: 'தமிழ்', long: 'தமிழ்' },
 ]
 
-type Keys = 'welcome' | 'loginSub' | 'policyNo' | 'dob' | 'signIn' | 'signingIn' | 'signOut' | 'language' | 'question' | 'typeAnswer' | 'send' | 'yes' | 'no' | 'listening' | 'speaking' | 'thinking' | 'tapToSpeak' | 'tapToSend' | 'micOn' | 'micOff' | 'micBlocked' | 'you' | 'understoodYes' | 'understoodNo' | 'understoodUnclear' | 'summaryTitle' | 'summarySub' | 'startAgain' | 'startAgainNote' | 'errorGeneric' | 'sessionExpired' | 'yourPolicy' | 'change' | 'startChat' | 'startChatSub' | 'transcript'
+type Keys = 'welcome' | 'loginSub' | 'policyNo' | 'dob' | 'signIn' | 'signingIn' | 'signOut' | 'language' | 'question' | 'typeAnswer' | 'send' | 'yes' | 'no' | 'listening' | 'speaking' | 'thinking' | 'tapToSpeak' | 'tapToSend' | 'micOn' | 'micOff' | 'micBlocked' | 'you' | 'understoodYes' | 'understoodNo' | 'understoodUnclear' | 'summaryTitle' | 'summarySub' | 'startAgain' | 'startAgainNote' | 'errorGeneric' | 'sessionExpired' | 'yourPolicy' | 'change' | 'startChat' | 'startChatSub' | 'continueCall' | 'transcript'
 
 /** Screen text in the four languages. English is the default. Translations were written by the developers: have a native speaker review them. */
 const S: Record<Lang, Record<Keys, string>> = {
@@ -22,6 +22,7 @@ const S: Record<Lang, Record<Keys, string>> = {
     change: 'Change',
     startChat: 'Start conversation',
     startChatSub: 'Spark will ask a few quick questions. Tap to begin.',
+    continueCall: 'Continue where I left off',
     transcript: 'Conversation',
     language: 'Language',
     question: 'Question',
@@ -60,6 +61,7 @@ const S: Record<Lang, Record<Keys, string>> = {
     change: 'Ubah',
     startChat: 'Mulakan perbualan',
     startChatSub: 'Spark akan bertanya beberapa soalan ringkas. Ketik untuk bermula.',
+    continueCall: 'Teruskan dari tempat saya berhenti',
     transcript: 'Perbualan',
     language: 'Bahasa',
     question: 'Soalan',
@@ -98,6 +100,7 @@ const S: Record<Lang, Record<Keys, string>> = {
     change: '更改',
     startChat: '开始对话',
     startChatSub: 'Spark 会问几个简短的问题。点按即可开始。',
+    continueCall: '从上次中断处继续',
     transcript: '对话记录',
     language: '语言',
     question: '问题',
@@ -136,6 +139,7 @@ const S: Record<Lang, Record<Keys, string>> = {
     change: 'மாற்று',
     startChat: 'உரையாடலைத் தொடங்கு',
     startChatSub: 'Spark சில சிறிய கேள்விகளைக் கேட்கும். தொடங்க தட்டவும்.',
+    continueCall: 'நான் நிறுத்திய இடத்திலிருந்து தொடர்',
     transcript: 'உரையாடல்',
     language: 'மொழி',
     question: 'கேள்வி',

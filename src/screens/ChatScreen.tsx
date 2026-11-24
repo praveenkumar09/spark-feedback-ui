@@ -33,6 +33,9 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [turn, setTurn] = useState<Turn>(initial)
   const [begun, setBegun] = useState(false)   // Spark only starts once the person taps Start (also lets the browser play sound)
+  const [starting, setStarting] = useState(false)
+  const startTurn = useRef<Turn | null>(null)   // the turn the conversation begins from (a fresh one after "Start conversation")
+  const resumeCall = useRef(false)              // true only when the person chose to continue an unfinished call
   const [phase, setPhase] = useState<Phase>('idle')
   const [level, setLevel] = useState(0)
   const [voiceOn, setVoiceOn] = useState(true)
@@ -171,13 +174,33 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
     await ask(next, next.repeat ? { lead: next.phrases.reply ? 'reply' : 'clarify' } : {})
   }, [ask, push, speaker, onComplete, onLang, dropPending])
 
+  /**
+   * "Start conversation" always begins a NEW conversation from question 1. If an unfinished call is saved for this customer it is put aside
+   * (saved as "restarted" in the admin). Only the small "continue" link carries on where it stopped.
+   */
+  async function begin(resume: boolean) {
+    const hasProgress = (turn.question?.number ?? 1) > 1
+    if (resume && hasProgress) { resumeCall.current = true; startTurn.current = turn; setBegun(true); return }
+    if (hasProgress) {
+      setStarting(true)
+      try {
+        const fresh = await api.restart(token, sid)
+        setTurn(fresh)
+        startTurn.current = fresh
+      } catch (e) { setStarting(false); fail(e); return }
+      setStarting(false)
+    }
+    resumeCall.current = false
+    setBegun(true)
+  }
+
   // First turn: greet (unless the customer is coming back part-way through), then ask.
   useEffect(() => {
     if (!begun || started.current) return
     started.current = true
     setPhase('speaking')
-    const midway = (initial.question?.number ?? 1) > 1
-    void ask(initial, midway ? {} : { lead: 'greeting' })
+    const first = startTurn.current ?? initial
+    void ask(first, resumeCall.current ? {} : { lead: 'greeting' })
     return () => { run.current++; recorder.cancel(); speaker.stop() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [begun])
@@ -277,7 +300,9 @@ export function ChatScreen({ token, initial, lang, onLang, theme, onToggleTheme,
           <img src="/aia-spark-bot.png" alt="" className="ios-hero__bot" width="200" height="212" />
           <h1 className="ios-title">{t.startChat}</h1>
           <p className="ios-lede">{t.startChatSub}</p>
-          <button type="button" className="ios-button" onClick={() => setBegun(true)} autoFocus>{t.startChat}</button>
+          <button type="button" className="ios-button" onClick={() => void begin(false)} disabled={starting} autoFocus>{t.startChat}</button>
+          {(turn.question?.number ?? 1) > 1 && <button type="button" className="ios-textbtn" onClick={() => void begin(true)} disabled={starting}>{t.continueCall}</button>}
+          {error && <p className="ios-note ios-note--error" role="alert">{error}</p>}
         </main>
       ) : (
       <main className="cb">
